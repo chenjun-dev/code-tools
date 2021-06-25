@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8"/>
+    <script src="promise-polyfill.js"></script>
+    <script src="devtools-detector.js"></script>
+    <title>检测 devtools 是否打开</title>
+</head>
+<body>
+<div id="showInfo"></div>
+</body>
+</html>
+<script>
+    var showInfo = document.getElementById('showInfo');
+    devtoolsDetector.addListener(function (isOpen) {
+        showInfo.innerText = isOpen ? 'devtools status: open' : 'devtools status: close';
+    });
+    devtoolsDetector.launch();
+    showInfo.innerText = 'open devtools to test';
+</script>
