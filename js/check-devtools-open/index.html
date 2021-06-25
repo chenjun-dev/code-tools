@@ -12,9 +12,10 @@
 </html>
 <script>
     var showInfo = document.getElementById('showInfo');
+    showInfo.innerText = 'open devtools to test';
+    
     devtoolsDetector.addListener(function (isOpen) {
         showInfo.innerText = isOpen ? 'devtools status: open' : 'devtools status: close';
     });
     devtoolsDetector.launch();
-    showInfo.innerText = 'open devtools to test';
 </script>
