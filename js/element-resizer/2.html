@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <script src="public/lib/jquery.min.js"></script>
+    <title>元素任意改变</title>
+    <style>
+        .cardtpl-design{
+            position: relative;
+            width:375px;
+            height:812px;
+            font-size:12px;
+        }
+        .cardtpl-design .background{
+            position: absolute;
+            left:0;
+            right:0;
+            top:0;
+            bottom:0;
+            background-color: #eee;
+            background-position: top;
+            background-size: contain;
+            background-repeat: no-repeat;
+        }
+        .cardtpl-design .design{
+            position: absolute;
+            left:0;
+            right:0;
+            top:0;
+            bottom:0;
+        }
+        .design.item-list .item{
+            position: absolute;
+            z-index: 100;
+            left:10px;
+            top:10px;
+            width:99px;
+            height:50px;
+            box-sizing: border-box;
+            background: red;
+        }
+
+        .resizer{
+            position: absolute;
+            z-index: 101;
+            cursor: move;
+            display: none;
+            /*border: solid 1px #0098f7;*/
+            user-select: none;
+            -o-user-select: none;
+            -moz-user-select: none;
+            -khtml-user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            box-sizing: content-box;
+            -webkit-box-sizing: content-box;
+            -moz-box-sizing: content-box;
+        }
+        .resizer .resizer-line{
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 0;
+            height: 0;
+        }
+        .resizer .resizer-line.left{
+            border-left: 1px solid #0098f7;
+        }
+        .resizer .resizer-line.right{
+            border-right: 1px solid #0098f7;
+        }
+        .resizer .resizer-line.top{
+            border-top: 1px solid #0098f7;
+        }
+        .resizer .resizer-line.bottom{
+            border-bottom: 1px solid #0098f7;
+        }
+        .resizer .resizer-handler{
+            position: absolute;
+            width:12px;
+            height:12px;
+            background: #0098f7;
+            border: solid 1px #FFF;
+            border-radius: 2px;
+            -moz-border-radius: 2px;
+            -webkit-border-radius: 2px;
+            background-clip: padding-box;
+            -moz-background-clip: padding;
+            -webkit-background-clip: padding-box;
+            box-sizing: border-box;
+            -webkit-box-sizing: border-box;
+            -moz-box-sizing: border-box;
+        }
+        .resizer .resizer-handler.top-left{
+            cursor: nw-resize;
+        }
+        .resizer .resizer-handler.top-right{
+            cursor: ne-resize;
+        }
+        .resizer .resizer-handler.bottom-left{
+            cursor: sw-resize;
+        }
+        .resizer .resizer-handler.bottom-right{
+            cursor: se-resize;
+        }
+    </style>
+</head>
+<body>
+<div>
+    <div class="cardtpl-design">
+        <div class="background"></div>
+        <div class="design item-list">
+            <div class="item" style="left:10px;top:10px;width:100px;height:100px;"></div>
+            <div class="item" style="left:150px;top:10px;width:100px;height:100px;"></div>
+        </div>
+        <div class="design resizer">
+            <div class="resizer-line left"></div>
+            <div class="resizer-line right"></div>
+            <div class="resizer-line top"></div>
+            <div class="resizer-line bottom"></div>
+            <div class="resizer-handler top-left"></div>
+            <div class="resizer-handler top-right"></div>
+            <div class="resizer-handler bottom-left"></div>
+            <div class="resizer-handler bottom-right"></div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
+<script>
+   function DesignResizer(itemListSelector, resizerSelector) {
+       var itemlist = $(itemListSelector), resizer = $(resizerSelector);
+
+       //相关数据
+       var relateItem = null, resizeData = null, moveData = null, resizerWait = false;
+
+       //一些固定的数据
+       var designData = {
+           width: resizer.parent().width(),
+           height: resizer.parent().height(),
+           minXY: 22,
+           keepRatio: true, //是否保持分辨率
+           cover: false, //resizer是否覆盖元素，方便移动操作
+       };
+
+       //设置尺寸和大小
+       function setResizerPostionSize(data){
+           resizer.css({
+               display: 'block',
+               left: data.left,
+               top: data.top,
+               width: designData.cover ? data.width : 0,
+               height: designData.cover ? data.height : 0,
+           });
+
+           resizer.children('.left').css({left: -2, height: data.height});
+           resizer.children('.right').css({left: data.width + 1, height: data.height});
+           resizer.children('.top').css({top: -2, width: data.width});
+           resizer.children('.bottom').css({top: data.height + 1, width: data.width});
+
+           resizer.children('.top-left').css({left: -7, top: -7});
+           resizer.children('.top-right').css({left: data.width - 4, top: -7});
+           resizer.children('.bottom-left').css({left: -7, top: data.height - 4});
+           resizer.children('.bottom-right').css({left: data.width - 4, top: data.height - 4});
+       }
+
+       //移动
+       resizer.on('mousedown', function (e) {
+           var position = relateItem.position();
+           resizeData = null;
+           moveData = {
+               pageX: e.pageX,
+               pageY: e.pageY,
+               left: position.left,
+               top: position.top,
+               width: relateItem.width(),
+               height: relateItem.height(),
+           };
+       });
+
+       //处理移动事件
+       function dealMove(e){
+           var dtX = e.pageX - moveData.pageX;
+           var dtY = e.pageY - moveData.pageY;
+
+           moveData.pageX = e.pageX;
+           moveData.pageY = e.pageY;
+           moveData.left += dtX;
+           moveData.top += dtY;
+
+           //位置限制
+           if(moveData.left < 0){
+               moveData.left = 0;
+           }
+           if(moveData.top < 0){
+               moveData.top = 0;
+           }
+           if(moveData.left + moveData.width > designData.width){
+               moveData.left = designData.width - moveData.width;
+           }
+           if(moveData.top + moveData.height > designData.height){
+               moveData.top = designData.height - moveData.height;
+           }
+
+           relateItem.css({left: moveData.left, top: moveData.top});
+           setResizerPostionSize(moveData);
+       }
+
+       //大小改变
+       resizer.on('mousedown', '.resizer-handler', function (e) {
+           var position = relateItem.position(), handler = $(this);
+
+           moveData = null;
+           designData.cover = e.ctrlKey;
+
+           resizeData = {
+               pageX: e.pageX,
+               pageY: e.pageY,
+               type: 0,
+               left: position.left,
+               top: position.top,
+               width: relateItem.width(),
+               height: relateItem.height(),
+               maxWidth: 0,
+               maxHeight: 0,
+               ratio: 1, //原始宽高比
+               ratioX: null, //true:使用X轴，false使用Y轴
+           };
+
+           //宽高比
+           resizeData.ratio = resizeData.width / resizeData.height;
+
+           //类型、最大宽高
+           if(handler.hasClass('top-left')){
+               resizeData.type = 1;
+               resizeData.maxWidth = resizeData.left + resizeData.width;
+               resizeData.maxHeight = resizeData.top + resizeData.height;
+           }else if(handler.hasClass('top-right')){
+               resizeData.type = 2;
+               resizeData.maxWidth = designData.width - resizeData.left;
+               resizeData.maxHeight = resizeData.top + resizeData.height;
+           }else if(handler.hasClass('bottom-left')){
+               resizeData.type = 3;
+               resizeData.maxWidth = resizeData.left + resizeData.width;
+               resizeData.maxHeight = designData.height - resizeData.top;
+           }else{
+               resizeData.type = 4;
+               resizeData.maxWidth = designData.width - resizeData.left;
+               resizeData.maxHeight = designData.height - resizeData.top;
+           }
+
+           //等比最大宽高校正
+           if(designData.keepRatio){
+               if(resizeData.maxWidth >= resizeData.ratio * resizeData.maxHeight){
+                   resizeData.maxWidth = resizeData.maxHeight * resizeData.ratio;
+               }else{
+                   resizeData.maxHeight = resizeData.maxWidth / resizeData.ratio;
+               }
+           }
+
+           //阻止冒泡，防止resizer触发点击事件
+           e.stopPropagation();
+       });
+
+       //处理大小变化
+       function dealResize(e){
+           var dtX = e.pageX - resizeData.pageX, dtY = e.pageY - resizeData.pageY;
+           var w = resizeData.width, h = resizeData.height;
+
+           resizeData.pageX = e.pageX;
+           resizeData.pageY = e.pageY;
+
+           if(resizeData.ratioX === null){
+               resizeData.ratioX = Math.abs(dtX) >= Math.abs(dtY);
+           }
+
+           //大小变化
+           if(resizeData.type === 1){
+               if((resizeData.width -= dtX) < designData.minXY) {
+                   resizeData.width = designData.minXY;
+               }
+               if((resizeData.height -= dtY) < designData.minXY) {
+                   resizeData.height = designData.minXY;
+               }
+           }else if(resizeData.type === 2){
+               if((resizeData.width += dtX) < designData.minXY) {
+                   resizeData.width = designData.minXY;
+               }
+               if((resizeData.height -= dtY) < designData.minXY) {
+                   resizeData.height = designData.minXY;
+               }
+           }else if(resizeData.type === 3){
+               if((resizeData.width -= dtX) < designData.minXY) {
+                   resizeData.width = designData.minXY;
+               }
+               if((resizeData.height += dtY) < designData.minXY) {
+                   resizeData.height = designData.minXY;
+               }
+           } else{
+               if((resizeData.width += dtX) < designData.minXY) {
+                   resizeData.width = designData.minXY;
+               }
+               if((resizeData.height += dtY) < designData.minXY) {
+                   resizeData.height = designData.minXY;
+               }
+           }
+
+           //大小校正
+           if(designData.keepRatio){
+               if(resizeData.ratioX){
+                   resizeData.height = resizeData.width / resizeData.ratio;
+               }else{
+                   resizeData.width = resizeData.height * resizeData.ratio;
+               }
+               if(resizeData.width > resizeData.maxWidth || resizeData.height > resizeData.maxHeight){
+                   resizeData.width = resizeData.maxWidth;
+                   resizeData.height = resizeData.maxHeight;
+               }
+           }else{
+               if(resizeData.width > resizeData.maxWidth){
+                   resizeData.width = resizeData.maxWidth;
+               }
+               if(resizeData.height > resizeData.maxHeight){
+                   resizeData.height = resizeData.maxHeight;
+               }
+           }
+
+           //位置校正
+           if(resizeData.type === 1){
+               resizeData.left -= resizeData.width - w;
+               resizeData.top -= resizeData.height - h;
+           }else if(resizeData.type === 2){
+               resizeData.top -= resizeData.height - h;
+           }else if(resizeData.type === 3){
+               resizeData.left -= resizeData.width - w;
+           }
+
+           relateItem.css({left: resizeData.left, top: resizeData.top, width: resizeData.width, height: resizeData.height});
+           setResizerPostionSize(resizeData);
+       }
+
+       //鼠标移动
+       $(document).on('mousemove', function (e) {
+           if(moveData){
+               dealMove(e);
+               return ;
+           }
+           if(resizeData){
+               dealResize(e);
+           }
+       });
+
+       //鼠标抬起
+       $(document).on('mouseup', function (e) {
+           if (designData.cover && !e.ctrlKey)
+               resizer.css({width: 0, height: 0});
+           designData.cover = e.ctrlKey;
+
+           if(resizeData)
+               resizeData = null;
+           if(moveData)
+               moveData = null;
+
+           //防止resizer取消
+           if(resizeData || moveData){
+               resizerWait = true;
+               setTimeout(function () {
+                   resizerWait = false;
+               }, 400);
+           }
+       });
+
+       //选择
+       itemlist.on('click', '.item', function (e) {
+           relateItem = $(this);
+
+           var position = relateItem.position();
+           setResizerPostionSize({
+               left: position.left,
+               top: position.top,
+               width: relateItem.width(),
+               height: relateItem.height(),
+           });
+
+           e.stopPropagation();
+       });
+
+       $(document).on('keydown', function (e) {
+
+       });
+       $(document).on('keyup', function (e) {
+
+       });
+
+       //取消选择
+       $(document).on('click', function (e) {
+           if(resizerWait || resizeData !== null || moveData !== null)
+               return ;
+           var that = $(e.target);
+           if(!that.hasClass('resizer') && that.closest('.resizer').length === 0){
+               resizer.css('display', 'none');
+           }
+           e.stopPropagation();
+       });
+    }
+
+   $(function () {
+       var itemlist = $('.design.item-list'), resizer = $('.design.resizer');
+       DesignResizer(itemlist, resizer);
+   });
+</script>
