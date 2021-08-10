@@ -32,6 +32,7 @@
         .design.item-list .item{
             position: absolute;
             z-index: 100;
+            box-sizing: border-box;
             background: red;
         }
 
@@ -109,296 +110,358 @@
 </html>
 <script>
    function DesignResizer(itemListSelector, resizerSelector) {
-        var itemlist = $(itemListSelector), resizer = $(resizerSelector);
+       var itemlist = $(itemListSelector), resizer = $(resizerSelector);
 
-        //相关数据
-        var relateItem = null, resizeData = null, moveData = null, resizerWait = false;
+       //相关数据
+       var relateItem = null, resizeData = null, moveData = null, resizerWait = false;
 
-        //设计模板尺寸
-        var designData = {
-            width: resizer.parent().width(),
-            height: resizer.parent().height(),
-        };
+       //设计模板尺寸
+       var designData = {
+           width: resizer.parent().width(),
+           height: resizer.parent().height(),
+           minXY: 22,
+           keepRatio: true,
+       };
 
-        //按键移动需要的数据
-        var arrowMoveData = {
-            pageX: 0,
-            pageY: 0,
-        };
+       //移动
+       resizer.on('mousedown', function (e) {
+           var position = relateItem.position();
+           resizeData = null;
+           moveData = {
+               pageX: e.pageX,
+               pageY: e.pageY,
+               left: position.left,
+               top: position.top,
+               width: relateItem.width(),
+               height: relateItem.height(),
+           };
+       });
 
-        //移动
-        resizer.on('mousedown', function (e) {
-            var position = resizer.position();
-            resizeData = null;
-            moveData = {
-                pageX: e.pageX,
-                pageY: e.pageY,
-                resizerLeft: position.left,
-                resizerTop: position.top,
-                resizerWidth: resizer.width(),
-                resizerHeight: resizer.height(),
-            };
-        });
+       //处理移动事件
+       function dealMove(e){
+           var dtX = e.pageX - moveData.pageX;
+           var dtY = e.pageY - moveData.pageY;
 
-        //大小改变
-        resizer.on('mousedown', '.handler', function (e) {
-            var position = resizer.position();
-            moveData = null;
-            resizeData = {
-                handler:$(this),
-                pageX: e.pageX,
-                pageY: e.pageY,
-                type: 0,
-                resizerLeft: position.left,
-                resizerTop: position.top,
-                resizerWidth: resizer.width(),
-                resizerHeight: resizer.height(),
-            };
-            if(resizeData.handler.hasClass('top-left')){
-                resizeData.type = 1;
-            }else if(resizeData.handler.hasClass('top-right')){
-                resizeData.type = 2;
-            }else if(resizeData.handler.hasClass('bottom-left')){
-                resizeData.type = 3;
-            }else{
-                resizeData.type = 4;
-            }
-            //阻止冒泡，防止resizer触发点击事件
-            e.stopPropagation();
-        });
+           moveData.pageX = e.pageX;
+           moveData.pageY = e.pageY;
+           moveData.left += dtX;
+           moveData.top += dtY;
 
-        //处理移动事件
-        function dealMove(e){
-            var dtX = e.pageX - moveData.pageX;
-            var dtY = e.pageY - moveData.pageY;
+           //位置限制
+           if(moveData.left < 0){
+               moveData.left = 0;
+           }
+           if(moveData.top < 0){
+               moveData.top = 0;
+           }
+           if(moveData.left + moveData.width > designData.width){
+               moveData.left = designData.width - moveData.width;
+           }
+           if(moveData.top + moveData.height > designData.height){
+               moveData.top = designData.height - moveData.height;
+           }
 
-            moveData.pageX = e.pageX;
-            moveData.pageY = e.pageY;
-            moveData.resizerLeft += dtX;
-            moveData.resizerTop += dtY;
+           relateItem.css({
+               left: moveData.left + 'px',
+               top: moveData.top + 'px',
+           });
+           resizer.css({
+               left: moveData.left - 2 + 'px',
+               top: moveData.top - 2 + 'px',
+           });
+       }
 
-            //位置限制
-            if(moveData.resizerLeft < -2){
-                moveData.resizerLeft = -2;
-            }
-            if(moveData.resizerTop < -2){
-                moveData.resizerTop = -2;
-            }
-            if(moveData.resizerLeft + moveData.resizerWidth > designData.width){
-                moveData.resizerLeft = designData.width - moveData.resizerWidth;
-            }
-            if(moveData.resizerTop + moveData.resizerHeight > designData.height){
-                moveData.resizerTop = designData.height - moveData.resizerHeight;
-            }
+       //大小改变
+       resizer.on('mousedown', '.handler', function (e) {
+           var position = relateItem.position(), handler = $(this);
+           moveData = null;
+           resizeData = {
+               pageX: e.pageX,
+               pageY: e.pageY,
+               type: 0,
+               left: position.left,
+               top: position.top,
+               width: relateItem.width(),
+               height: relateItem.height(),
+               maxWidth: 0,
+               maxHeight: 0,
+               ratio: 1, //原始宽高比
+               ratioX: null, //true:使用X轴，false使用Y轴
+           };
 
-            resizer.css({
-                left: moveData.resizerLeft + 'px',
-                top: moveData.resizerTop + 'px',
-            });
-            relateItem.css({
-                left: moveData.resizerLeft + 2 + 'px',
-                top: moveData.resizerTop + 2 + 'px',
-            });
-        }
+           //宽高比
+           resizeData.ratio = resizeData.width / resizeData.height;
 
-        //处理大小变化
-        function dealResize(e){
-            var minXY = 22;
-            var dtX = e.pageX - resizeData.pageX;
-            var dtY = e.pageY - resizeData.pageY;
-            resizeData.pageX = e.pageX;
-            resizeData.pageY = e.pageY;
+           //类型、最大宽高
+           if(handler.hasClass('top-left')){
+               resizeData.type = 1;
+               resizeData.maxWidth = resizeData.left + resizeData.width;
+               resizeData.maxHeight = resizeData.top + resizeData.height;
+           }else if(handler.hasClass('top-right')){
+               resizeData.type = 2;
+               resizeData.maxWidth = designData.width - resizeData.left;
+               resizeData.maxHeight = resizeData.top + resizeData.height;
+           }else if(handler.hasClass('bottom-left')){
+               resizeData.type = 3;
+               resizeData.maxWidth = resizeData.left + resizeData.width;
+               resizeData.maxHeight = designData.height - resizeData.top;
+           }else{
+               resizeData.type = 4;
+               resizeData.maxWidth = designData.width - resizeData.left;
+               resizeData.maxHeight = designData.height - resizeData.top;
+           }
 
-            if(resizeData.type === 1){
-                resizeData.resizerLeft += dtX;
-                resizeData.resizerTop += dtY;
-                resizeData.resizerWidth -= dtX;
-                resizeData.resizerHeight -= dtY;
-                //校正
-                if(resizeData.resizerLeft < -2){
-                    resizeData.resizerWidth += resizeData.resizerLeft + 2;
-                    resizeData.resizerLeft = -2;
-                }
-                if(resizeData.resizerTop < -2){
-                    resizeData.resizerHeight += resizeData.resizerTop + 2;
-                    resizeData.resizerTop = -2;
-                }
-                if(resizeData.resizerWidth < minXY){
-                    resizeData.resizerLeft -= minXY - resizeData.resizerWidth;
-                    resizeData.resizerWidth = minXY;
-                }
-                if(resizeData.resizerHeight < minXY){
-                    resizeData.resizerTop -= minXY - resizeData.resizerHeight;
-                    resizeData.resizerHeight = minXY;
-                }
-            }else if(resizeData.type === 2){
-                resizeData.resizerTop += dtY;
-                resizeData.resizerWidth += dtX;
-                resizeData.resizerHeight -= dtY;
-                //校正
-                if(resizeData.resizerTop < -2){
-                    resizeData.resizerHeight += resizeData.resizerTop + 2;
-                    resizeData.resizerTop = -2;
-                }
-                if(resizeData.resizerWidth < minXY){
-                    resizeData.resizerWidth = minXY;
-                }
-                if(resizeData.resizerLeft + resizeData.resizerWidth > designData.width){
-                    resizeData.resizerWidth = designData.width - resizeData.resizerLeft;
-                }
-                if(resizeData.resizerHeight < minXY){
-                    resizeData.resizerTop -= minXY - resizeData.resizerHeight;
-                    resizeData.resizerHeight = minXY;
-                }
-            }else if(resizeData.type === 3){
-                resizeData.resizerLeft += dtX;
-                resizeData.resizerWidth -= dtX;
-                resizeData.resizerHeight += dtY;
-                //校正
-                if(resizeData.resizerLeft < -2){
-                    resizeData.resizerWidth += resizeData.resizerLeft + 2;
-                    resizeData.resizerLeft = -2;
-                }
-                if(resizeData.resizerWidth < minXY){
-                    resizeData.resizerLeft -= minXY - resizeData.resizerWidth;
-                    resizeData.resizerWidth = minXY;
-                }
-                if(resizeData.resizerHeight < minXY){
-                    resizeData.resizerHeight = minXY;
-                }
-                if(resizeData.resizerTop + resizeData.resizerHeight > designData.height){
-                    resizeData.resizerHeight = designData.height - resizeData.resizerTop;
-                }
-            }else{
-                resizeData.resizerWidth += dtX;
-                resizeData.resizerHeight += dtY;
-                //校正
-                if(resizeData.resizerWidth < minXY){
-                    resizeData.resizerWidth = minXY;
-                }
-                if(resizeData.resizerLeft + resizeData.resizerWidth > designData.width){
-                    resizeData.resizerWidth = designData.width - resizeData.resizerLeft;
-                }
-                if(resizeData.resizerHeight < minXY){
-                    resizeData.resizerHeight = minXY;
-                }
-                if(resizeData.resizerTop + resizeData.resizerHeight > designData.height){
-                    resizeData.resizerHeight = designData.height - resizeData.resizerTop;
-                }
-            }
+           //等比最大宽高校正
+           if(designData.keepRatio){
+               if(resizeData.maxWidth >= resizeData.ratio * resizeData.maxHeight){
+                   resizeData.maxWidth = resizeData.maxHeight * resizeData.ratio;
+               }else{
+                   resizeData.maxHeight = resizeData.maxWidth / resizeData.ratio;
+               }
+           }
 
-            if(resizeData.resizerLeft < -2)
-                resizeData.resizerLeft = -2;
-            if(resizeData.resizerTop < -2)
-                resizeData.resizerTop = -2;
+           //阻止冒泡，防止resizer触发点击事件
+           e.stopPropagation();
+       });
 
-            resizer.css({
-                left: resizeData.resizerLeft + 'px',
-                top: resizeData.resizerTop + 'px',
-                width: resizeData.resizerWidth + 'px',
-                height: resizeData.resizerHeight + 'px',
-            });
-            relateItem.css({
-                left: resizeData.resizerLeft + 2 + 'px',
-                top: resizeData.resizerTop + 2 + 'px',
-                width: resizeData.resizerWidth - 2 + 'px',
-                height: resizeData.resizerHeight - 2 + 'px',
-            });
-        }
+       //处理大小变化
+       function dealResizeRatio(e){
+           var dtX = e.pageX - resizeData.pageX, dtY = e.pageY - resizeData.pageY;
+           var w = resizeData.width, h = resizeData.height;
 
-        //鼠标移动
-        $(document).on('mousemove', function (e) {
-            arrowMoveData.pageX = e.pageX;
-            arrowMoveData.pageY = e.pageY;
+           resizeData.pageX = e.pageX;
+           resizeData.pageY = e.pageY;
 
-            if(moveData){
-                dealMove(e);
-                return ;
-            }
-            if(resizeData){
-                dealResize(e);
-            }
-        });
+           if(resizeData.ratioX === null){
+               resizeData.ratioX = Math.abs(dtX) >= Math.abs(dtY);
+           }
 
-        //方向键移动
-        $(document).on('keydown', function (e) {
-            if(resizer.css('display') === 'none'){
-                return ;
-            }
+           //大小变化
+           if(resizeData.type === 1){
+               if((resizeData.width -= dtX) < designData.minXY) {
+                   resizeData.width = designData.minXY;
+               }
+               if((resizeData.height -= dtY) < designData.minXY) {
+                   resizeData.height = designData.minXY;
+               }
+           }else if(resizeData.type === 2){
+               if((resizeData.width += dtX) < designData.minXY) {
+                   resizeData.width = designData.minXY;
+               }
+               if((resizeData.height -= dtY) < designData.minXY) {
+                   resizeData.height = designData.minXY;
+               }
+           }else if(resizeData.type === 3){
+               if((resizeData.width -= dtX) < designData.minXY) {
+                   resizeData.width = designData.minXY;
+               }
+               if((resizeData.height += dtY) < designData.minXY) {
+                   resizeData.height = designData.minXY;
+               }
+           } else{
+               if((resizeData.width += dtX) < designData.minXY) {
+                   resizeData.width = designData.minXY;
+               }
+               if((resizeData.height += dtY) < designData.minXY) {
+                   resizeData.height = designData.minXY;
+               }
+           }
 
-            var event = null;
-            if(e.key === 'ArrowUp'){
-                event = {pageX: 0, pageY: -1};
-            }else if(e.key === 'ArrowDown'){
-                event = {pageX: 0, pageY: 1};
-            }else if(e.key === 'ArrowLeft'){
-                event = {pageX: -1, pageY: 0};
-            }else if(e.key === 'ArrowRight'){
-                event = {pageX: 1, pageY: 0};
-            }else{
-                return ;
-            }
+           //大小校正
+           if(designData.keepRatio){
+               if(resizeData.ratioX){
+                   resizeData.height = resizeData.width / resizeData.ratio;
+               }else{
+                   resizeData.width = resizeData.height * resizeData.ratio;
+               }
+               if(resizeData.width > resizeData.maxWidth || resizeData.height > resizeData.maxHeight){
+                   resizeData.width = resizeData.maxWidth;
+                   resizeData.height = resizeData.maxHeight;
+               }
+           }else{
+               if(resizeData.width > resizeData.maxWidth){
+                   resizeData.width = resizeData.maxWidth;
+               }
+               if(resizeData.height > resizeData.maxHeight){
+                   resizeData.height = resizeData.maxHeight;
+               }
+           }
 
-            var position = resizer.position();
-            moveData = {
-                pageX: arrowMoveData.pageX,
-                pageY: arrowMoveData.pageY,
-                resizerLeft: position.left,
-                resizerTop: position.top,
-                resizerWidth: resizer.width(),
-                resizerHeight: resizer.height(),
-            };
+           //位置校正
+           if(resizeData.type === 1){
+               resizeData.left -= resizeData.width - w;
+               resizeData.top -= resizeData.height - h;
+           }else if(resizeData.type === 2){
+               resizeData.top -= resizeData.height - h;
+           }else if(resizeData.type === 3){
+               resizeData.left -= resizeData.width - w;
+           }
 
-            event.pageX += moveData.pageX;
-            event.pageY += moveData.pageY;
-            dealMove(event);
+           relateItem.css({
+               left: resizeData.left + 'px',
+               top: resizeData.top + 'px',
+               width: resizeData.width + 'px',
+               height: resizeData.height + 'px',
+           });
+           resizer.css({
+               left: resizeData.left - 2 + 'px',
+               top: resizeData.top - 2 + 'px',
+               width: resizeData.width + 2 + 'px',
+               height: resizeData.height + 2 + 'px',
+           });
+       }
 
-            //移除
-            moveData = null;
-            return false;
-        });
+       function dealResize(e){
+           var dtX = e.pageX - resizeData.pageX, dtY = e.pageY - resizeData.pageY;
 
-        //鼠标抬起
-        $(document).on('mouseup', function (e) {
-            if(resizeData)
-                resizeData = null;
-            if(moveData)
-                moveData = null;
+           resizeData.pageX = e.pageX;
+           resizeData.pageY = e.pageY;
 
-            //防止resizer取消
-            if(resizeData || moveData){
-                resizerWait = true;
-                setTimeout(function () {
-                    resizerWait = false;
-                }, 400);
-            }
-        });
+           if(resizeData.type === 1){
+               resizeData.left += dtX;
+               resizeData.top += dtY;
+               resizeData.width -= dtX;
+               resizeData.height -= dtY;
+               //校正
+               if(resizeData.left < -2){
+                   resizeData.width += resizeData.left + 2;
+                   resizeData.left = -2;
+               }
+               if(resizeData.top < -2){
+                   resizeData.height += resizeData.top + 2;
+                   resizeData.top = -2;
+               }
+               if(resizeData.width < designData.minXY){
+                   resizeData.left -= designData.minXY - resizeData.width;
+                   resizeData.width = designData.minXY;
+               }
+               if(resizeData.height < designData.minXY){
+                   resizeData.top -= designData.minXY - resizeData.height;
+                   resizeData.height = designData.minXY;
+               }
+           }else if(resizeData.type === 2){
+               resizeData.top += dtY;
+               resizeData.width += dtX;
+               resizeData.height -= dtY;
+               //校正
+               if(resizeData.top < -2){
+                   resizeData.height += resizeData.top + 2;
+                   resizeData.top = -2;
+               }
+               if(resizeData.width < designData.minXY){
+                   resizeData.width = designData.minXY;
+               }
+               if(resizeData.left + resizeData.width > designData.width){
+                   resizeData.width = designData.width - resizeData.left;
+               }
+               if(resizeData.height < designData.minXY){
+                   resizeData.top -= designData.minXY - resizeData.height;
+                   resizeData.height = designData.minXY;
+               }
+           }else if(resizeData.type === 3){
+               resizeData.left += dtX;
+               resizeData.width -= dtX;
+               resizeData.height += dtY;
+               //校正
+               if(resizeData.left < -2){
+                   resizeData.width += resizeData.left + 2;
+                   resizeData.left = -2;
+               }
+               if(resizeData.width < designData.minXY){
+                   resizeData.left -= designData.minXY - resizeData.width;
+                   resizeData.width = designData.minXY;
+               }
+               if(resizeData.height < designData.minXY){
+                   resizeData.height = designData.minXY;
+               }
+               if(resizeData.top + resizeData.height > designData.height){
+                   resizeData.height = designData.height - resizeData.top;
+               }
+           }else{
+               resizeData.width += dtX;
+               resizeData.height += dtY;
+               //校正
+               if(resizeData.width < designData.minXY){
+                   resizeData.width = designData.minXY;
+               }
+               if(resizeData.left + resizeData.width > designData.width){
+                   resizeData.width = designData.width - resizeData.left;
+               }
+               if(resizeData.height < designData.minXY){
+                   resizeData.height = designData.minXY;
+               }
+               if(resizeData.top + resizeData.height > designData.height){
+                   resizeData.height = designData.height - resizeData.top;
+               }
+           }
 
-        //选择
-        itemlist.on('click', '.item', function (e) {
-            relateItem = $(this);
-            var position = relateItem.position();
-            resizer.css({
-                display: 'block',
-                left: position.left - 2 + 'px',
-                top: position.top - 2 + 'px',
-                width: relateItem.width() + 2 + 'px',
-                height: relateItem.height() + 2 + 'px',
-            });
-            e.stopPropagation();
-        });
+           resizer.css({
+               left: resizeData.left + 'px',
+               top: resizeData.top + 'px',
+               width: resizeData.width + 'px',
+               height: resizeData.height + 'px',
+           });
+           relateItem.css({
+               left: resizeData.left + 2 + 'px',
+               top: resizeData.top + 2 + 'px',
+               width: resizeData.width - 2 + 'px',
+               height: resizeData.height - 2 + 'px',
+           });
+       }
 
-        //取消选择
-        $(document).on('click', function (e) {
-            if(resizerWait || resizeData !== null)
-                return ;
-            var that = $(e.target);
-            if(!that.hasClass('resizer') && that.closest('.resizer').length === 0){
-                resizer.css('display', 'none');
-            }
-            e.stopPropagation();
-        });
-    };
+       //鼠标移动
+       $(document).on('mousemove', function (e) {
+           if(moveData){
+               dealMove(e);
+               return ;
+           }
+           if(resizeData){
+               dealResizeRatio(e);
+               // dealResize(e);
+           }
+       });
+
+       //鼠标抬起
+       $(document).on('mouseup', function (e) {
+           if(resizeData)
+               resizeData = null;
+           if(moveData)
+               moveData = null;
+
+           //防止resizer取消
+           if(resizeData || moveData){
+               resizerWait = true;
+               setTimeout(function () {
+                   resizerWait = false;
+               }, 400);
+           }
+       });
+
+       //选择
+       itemlist.on('click', '.item', function (e) {
+           relateItem = $(this);
+           var position = relateItem.position();
+           resizer.css({
+               display: 'block',
+               left: position.left - 2 + 'px',
+               top: position.top - 2 + 'px',
+               width: relateItem.width() + 2 + 'px',
+               height: relateItem.height() + 2 + 'px',
+           });
+           e.stopPropagation();
+       });
+
+       //取消选择
+       $(document).on('click', function (e) {
+           if(resizerWait || resizeData !== null)
+               return ;
+           var that = $(e.target);
+           if(!that.hasClass('resizer') && that.closest('.resizer').length === 0){
+               resizer.css('display', 'none');
+           }
+           e.stopPropagation();
+       });
+    }
 
    $(function () {
        var itemlist = $('.design.item-list'), resizer = $('.design.resizer');
