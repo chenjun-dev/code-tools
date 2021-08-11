@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <script src="public/lib/jquery.min.js"></script>
+    <title>元素任意改变</title>
+    <style>
+        .cardtpl-design{
+            position: relative;
+            width:375px;
+            height:812px;
+            font-size:12px;
+        }
+        .cardtpl-design .background{
+            position: absolute;
+            left:0;
+            right:0;
+            top:0;
+            bottom:0;
+            background-color: #eee;
+            background-position: top;
+            background-size: contain;
+            background-repeat: no-repeat;
+        }
+        .cardtpl-design .design{
+            position: absolute;
+            left:0;
+            right:0;
+            top:0;
+            bottom:0;
+        }
+        .design.item-list .item{
+            position: absolute;
+            z-index: 100;
+            left:10px;
+            top:10px;
+            width:99px;
+            height:50px;
+            box-sizing: border-box;
+            background: red;
+        }
+
+        .resizer{
+            position: absolute;
+            z-index: 101;
+            cursor: move;
+            display: none;
+            /*border: solid 1px #0098f7;*/
+            user-select: none;
+            -o-user-select: none;
+            -moz-user-select: none;
+            -khtml-user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            box-sizing: content-box;
+            -webkit-box-sizing: content-box;
+            -moz-box-sizing: content-box;
+        }
+        .resizer .resizer-line{
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 0;
+            height: 0;
+        }
+        .resizer .resizer-line.left{
+            border-left: 1px solid #0098f7;
+        }
+        .resizer .resizer-line.right{
+            border-right: 1px solid #0098f7;
+        }
+        .resizer .resizer-line.top{
+            border-top: 1px solid #0098f7;
+        }
+        .resizer .resizer-line.bottom{
+            border-bottom: 1px solid #0098f7;
+        }
+        .resizer .resizer-handler{
+            position: absolute;
+            width:12px;
+            height:12px;
+            background: #0098f7;
+            border: solid 1px #FFF;
+            border-radius: 2px;
+            -moz-border-radius: 2px;
+            -webkit-border-radius: 2px;
+            background-clip: padding-box;
+            -moz-background-clip: padding;
+            -webkit-background-clip: padding-box;
+            box-sizing: border-box;
+            -webkit-box-sizing: border-box;
+            -moz-box-sizing: border-box;
+        }
+        .resizer .resizer-handler.top-left{
+            cursor: nw-resize;
+        }
+        .resizer .resizer-handler.top-right{
+            cursor: ne-resize;
+        }
+        .resizer .resizer-handler.bottom-left{
+            cursor: sw-resize;
+        }
+        .resizer .resizer-handler.bottom-right{
+            cursor: se-resize;
+        }
+    </style>
+</head>
+<body>
+<div>
+    <div class="cardtpl-design">
+        <div class="background"></div>
+        <div class="design item-list">
+            <div class="item" style="left:10px;top:10px;width:100px;height:100px;"></div>
+            <div class="item" style="left:150px;top:10px;width:100px;height:100px;"></div>
+        </div>
+        <div class="design resizer">
+            <div class="resizer-line left"></div>
+            <div class="resizer-line right"></div>
+            <div class="resizer-line top"></div>
+            <div class="resizer-line bottom"></div>
+            <div class="resizer-handler top-left"></div>
+            <div class="resizer-handler top-right"></div>
+            <div class="resizer-handler bottom-left"></div>
+            <div class="resizer-handler bottom-right"></div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
+<script>
+    !(function (w) {
+        var parent = {
+            designData: {
+                width: 0,
+                height: 0,
+                minXY: 12,
+                keepRatio: false, //是否保持分辨率
+                cover: false, //resizer是否覆盖元素，方便移动操作
+            },
+            resizerWait: false,
+
+            //设置resizer位置和大小
+            setResizerPostionSize: function (data, isTimer) {
+                var that = this;
+                function setPostionSize() {
+                    that.resizer.css({
+                        display: 'block',
+                        left: data.left,
+                        top: data.top,
+                        width: that.designData.cover ? data.width : 0,
+                        height: that.designData.cover ? data.height : 0,
+                    });
+
+                    that.resizer.children('.left').css({left: -2, height: data.height});
+                    that.resizer.children('.right').css({left: data.width + 1, height: data.height});
+                    that.resizer.children('.top').css({top: -2, width: data.width});
+                    that.resizer.children('.bottom').css({top: data.height + 1, width: data.width});
+
+                    that.resizer.children('.top-left').css({left: -7, top: -7});
+                    that.resizer.children('.top-right').css({left: data.width - 4, top: -7});
+                    that.resizer.children('.bottom-left').css({left: -7, top: data.height - 4});
+                    that.resizer.children('.bottom-right').css({left: data.width - 4, top: data.height - 4});
+                }
+                if(isTimer){
+                    if(that.designData.resizerTimer) {
+                        clearTimeout(that.designData.resizerTimer);
+                    }
+                    that.designData.resizerTimer = setTimeout(function () {
+                        setPostionSize();
+                        that.designData.resizerTimer = null;
+                    }, 200);
+                }else{
+                    setPostionSize();
+                }
+            },
+
+            //获取移动数据
+            getMoveData: function(mouseEvent, relateItem){
+                var position = relateItem.position();
+                return  {
+                    pageX: mouseEvent.pageX,
+                    pageY: mouseEvent.pageY,
+                    left: position.left,
+                    top: position.top,
+                    width: relateItem.width(),
+                    height: relateItem.height(),
+                };
+            },
+
+            //获取大小数据
+            getResizeData: function(mouseEvent, relateItem, handler){
+                var position = relateItem.position();
+                var resizeData = {
+                    pageX: mouseEvent.pageX,
+                    pageY: mouseEvent.pageY,
+                    type: 0,
+                    left: position.left,
+                    top: position.top,
+                    width: relateItem.width(),
+                    height: relateItem.height(),
+                    oldWidth: 0,
+                    oldHeight: 0,
+                    maxWidth: 0,
+                    maxHeight: 0,
+                    ratio: 1, //原始宽高比
+                    ratioX: null, //true:使用X轴，false使用Y轴
+                };
+
+                //宽高比
+                resizeData.oldWidth = resizeData.width;
+                resizeData.oldHeight = resizeData.height;
+                resizeData.ratio = resizeData.width / resizeData.height;
+
+                //类型、最大宽高
+                if(handler.hasClass('top-left')){
+                    resizeData.type = 1;
+                    resizeData.maxWidth = resizeData.left + resizeData.width;
+                    resizeData.maxHeight = resizeData.top + resizeData.height;
+                }else if(handler.hasClass('top-right')){
+                    resizeData.type = 2;
+                    resizeData.maxWidth = this.designData.width - resizeData.left;
+                    resizeData.maxHeight = resizeData.top + resizeData.height;
+                }else if(handler.hasClass('bottom-left')){
+                    resizeData.type = 3;
+                    resizeData.maxWidth = resizeData.left + resizeData.width;
+                    resizeData.maxHeight = this.designData.height - resizeData.top;
+                }else{
+                    resizeData.type = 4;
+                    resizeData.maxWidth = this.designData.width - resizeData.left;
+                    resizeData.maxHeight = this.designData.height - resizeData.top;
+                }
+
+                //等比最大宽高校正
+                if(this.designData.keepRatio){
+                    if(resizeData.maxWidth >= resizeData.ratio * resizeData.maxHeight){
+                        resizeData.maxWidth = resizeData.maxHeight * resizeData.ratio;
+                    }else{
+                        resizeData.maxHeight = resizeData.maxWidth / resizeData.ratio;
+                    }
+                }
+
+                return resizeData;
+            },
+
+            //处理移动事件
+            calcMoveData : function (mouseEvent, moveData){
+                var dtX = mouseEvent.pageX - moveData.pageX;
+                var dtY = mouseEvent.pageY - moveData.pageY;
+
+                moveData.pageX = mouseEvent.pageX;
+                moveData.pageY = mouseEvent.pageY;
+                moveData.left += dtX;
+                moveData.top += dtY;
+
+                //位置限制
+                if(moveData.left < 0){
+                    moveData.left = 0;
+                }
+                if(moveData.top < 0){
+                    moveData.top = 0;
+                }
+                if(moveData.left + moveData.width > this.designData.width){
+                    moveData.left = this.designData.width - moveData.width;
+                }
+                if(moveData.top + moveData.height > this.designData.height){
+                    moveData.top = this.designData.height - moveData.height;
+                }
+            },
+
+            //处理大小变化
+            calcResizeData: function(mouseEvent, resizeData){
+                var dtX = mouseEvent.pageX - resizeData.pageX, dtY = mouseEvent.pageY - resizeData.pageY;
+                var w = resizeData.width, h = resizeData.height;
+
+                resizeData.pageX = mouseEvent.pageX;
+                resizeData.pageY = mouseEvent.pageY;
+
+                if(resizeData.ratioX === null){
+                    resizeData.ratioX = Math.abs(dtX) >= Math.abs(dtY);
+                }
+
+                //大小变化
+                if(resizeData.type === 1){
+                    if((resizeData.width -= dtX) < this.designData.minXY) {
+                        resizeData.width = this.designData.minXY;
+                    }
+                    if((resizeData.height -= dtY) < this.designData.minXY) {
+                        resizeData.height = this.designData.minXY;
+                    }
+                }else if(resizeData.type === 2){
+                    if((resizeData.width += dtX) < this.designData.minXY) {
+                        resizeData.width = this.designData.minXY;
+                    }
+                    if((resizeData.height -= dtY) < this.designData.minXY) {
+                        resizeData.height = this.designData.minXY;
+                    }
+                }else if(resizeData.type === 3){
+                    if((resizeData.width -= dtX) < this.designData.minXY) {
+                        resizeData.width = this.designData.minXY;
+                    }
+                    if((resizeData.height += dtY) < this.designData.minXY) {
+                        resizeData.height = this.designData.minXY;
+                    }
+                } else{
+                    if((resizeData.width += dtX) < this.designData.minXY) {
+                        resizeData.width = this.designData.minXY;
+                    }
+                    if((resizeData.height += dtY) < this.designData.minXY) {
+                        resizeData.height = this.designData.minXY;
+                    }
+                }
+
+                //大小校正
+                if(this.designData.keepRatio){
+                    if(resizeData.ratioX){
+                        resizeData.height = resizeData.width / resizeData.ratio;
+                    }else{
+                        resizeData.width = resizeData.height * resizeData.ratio;
+                    }
+                    if(resizeData.width > resizeData.maxWidth || resizeData.height > resizeData.maxHeight){
+                        resizeData.width = resizeData.maxWidth;
+                        resizeData.height = resizeData.maxHeight;
+                    }
+                }else{
+                    if(resizeData.width > resizeData.maxWidth){
+                        resizeData.width = resizeData.maxWidth;
+                    }
+                    if(resizeData.height > resizeData.maxHeight){
+                        resizeData.height = resizeData.maxHeight;
+                    }
+                }
+
+                //位置校正
+                if(resizeData.type === 1){
+                    resizeData.left -= resizeData.width - w;
+                    resizeData.top -= resizeData.height - h;
+                }else if(resizeData.type === 2){
+                    resizeData.top -= resizeData.height - h;
+                }else if(resizeData.type === 3){
+                    resizeData.left -= resizeData.width - w;
+                }
+            }
+        };
+
+        //处理元素移动和缩放
+        function DesignResizer (itemListSelector, resizerSelector){
+            this.itemlist = $(itemListSelector);
+            this.resizer = $(resizerSelector);
+
+            //相关数据
+            this.relateItem = null;
+            this.resizeData = null;
+            this.moveData = null;
+            this.designData.width = this.resizer.parent().width();
+            this.designData.height = this.resizer.parent().height();
+
+            var that = this;
+
+            //选中元素
+            this.itemlist.on('click', '.item', function (e) {
+                var relateItem = $(this), position = relateItem.position();
+
+                that.relateItem = relateItem;
+                that.setResizerPostionSize({
+                    left: position.left,
+                    top: position.top,
+                    width: relateItem.width(),
+                    height: relateItem.height(),
+                });
+
+                e.stopPropagation();
+            });
+
+            //取消选中元素
+            $(document).on('click', function (e) {
+                if(that.resizerWait || that.resizeData !== null || that.moveData !== null)
+                    return ;
+                var target = $(e.target);
+                if(!target.hasClass('resizer') && target.closest('.resizer').length === 0){
+                    that.resizer.css('display', 'none');
+                }
+                e.stopPropagation();
+            });
+
+            //选择元素按键抬起（输入内容）
+            this.itemlist.on('keyup', '.item', function () {
+                var item = $(this), position = item.position();
+                that.setResizerPostionSize({
+                    left: position.left,
+                    top: position.top,
+                    width: that.relateItem.width(),
+                    height: that.relateItem.height(),
+                }, true);
+            });
+
+            //移动选中
+            this.resizer.on('mousedown', function (e) {
+                that.resizeData = null;
+                that.moveData = that.getMoveData(e, that.relateItem);
+            });
+
+            //缩放选中
+            this.resizer.on('mousedown', '.resizer-handler', function (e) {
+                that.moveData = null;
+                that.designData.cover = e.ctrlKey;
+                that.resizeData = that.getResizeData(e, that.relateItem, $(this));
+                //阻止冒泡，防止resizer触发点击事件
+                e.stopPropagation();
+            });
+
+            //移动鼠标
+            $(document).on('mousemove', function (e) {
+                if(that.moveData){
+                    that.calcMoveData(e, that.moveData, that);
+                    that.relateItem.css({left: that.moveData.left, top: that.moveData.top, width: that.moveData.width, height: that.moveData.height});
+                    that.setResizerPostionSize(that.moveData);
+                    return ;
+                }
+                if(that.resizeData){
+                    that.calcResizeData(e, that.resizeData);
+                    that.relateItem.css({left: that.resizeData.left, top: that.resizeData.top, width: that.resizeData.width, height: that.resizeData.height});
+                    that.setResizerPostionSize(that.resizeData);
+                }
+            });
+
+            //鼠标抬起
+            $(document).on('mouseup', function (e) {
+                if (that.designData.cover && !e.ctrlKey) {
+                    that.resizer.css({width: 0, height: 0});
+                }
+                that.designData.cover = e.ctrlKey;
+
+                //防止resizer取消
+                if(that.resizeData || that.moveData){
+                    that.resizerWait = true;
+                    setTimeout(function () {
+                        that.resizerWait = false;
+                    }, 400);
+                }
+
+                if(that.resizeData){
+                    that.resizeData = null;
+                }
+                if(that.moveData){
+                    that.moveData = null;
+                }
+            });
+        }
+
+        DesignResizer.prototype = parent;
+
+        w.DesignResizer = DesignResizer;
+    }(window));
+
+   $(function () {
+       var itemlist = $('.design.item-list'), resizer = $('.design.resizer');
+       new DesignResizer(itemlist, resizer);
+   });
+</script>
